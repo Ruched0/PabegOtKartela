@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gartic Runner 3D - Final Version!</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #000; }
+        canvas { display: block; }
+        .ui-panel { position: absolute; background: rgba(10, 20, 40, 0.8); backdrop-filter: blur(5px); padding: 15px; border-radius: 12px; z-index: 100; color: #ecf0f1; border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 4px 20px rgba(0,0,0,0.3); -webkit-user-select: none; user-select: none; font-family: 'Segoe UI', Arial, sans-serif; }
+        #stats { top: 20px; left: 20px; }
+        #chat { top: 20px; right: 20px; width: 320px; height: 50vh; min-height: 300px; max-height: 500px; display: flex; flex-direction: column; }
+        #shop { bottom: 20px; left: 20px; width: 250px; }
+        #chatMessages { flex-grow: 1; overflow-y: auto; font-size: 14px; margin-bottom: 10px; scroll-behavior: smooth; }
+        #viewerCount { padding: 8px 12px; font-size: 14px; font-weight: bold; text-align: center; background: #c0392b; border-radius: 8px; margin-bottom: 10px;}
+        .overlay { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 200; display: none; text-align: center; flex-direction: column; align-items: center; }
+        .overlay h2 { font-size: 48px; color: #e74c3c; margin-bottom: 10px; }
+        .btn { background: #3498db; color: white; border: none; padding: 12px 25px; border-radius: 8px; cursor: pointer; font-size: 18px; margin-top: 20px; font-weight: bold; }
+        .btn-shop { width: 100%; text-align: left; background: #8e44ad; font-size: 14px; padding: 10px 15px; margin: 5px 0 0 0; display: flex; justify-content: space-between; align-items: center; }
+        .btn-shop:hover:not(:disabled) { background: #9b59b6; }
+        .btn-shop:disabled { background: #566573; cursor: not-allowed; opacity: 0.7; }
+        .price { font-weight: normal; opacity: 0.8; }
+        .chat-message { margin-bottom: 8px; padding: 6px 10px; border-radius: 8px; background: rgba(255, 255, 255, 0.07); line-height: 1.4; }
+        .fan b { color: #2ecc71; } .troll b { color: #e67e22; }
+        .donation { color: #f1c40f; font-weight: bold; border-left: 4px solid #f1c40f; background: rgba(241, 196, 15, 0.1); }
+        .milestone { color: #2ecc71; font-weight: bold; border-left: 4px solid #2ecc71; background: rgba(46, 204, 113, 0.1); }
+        .cartel-message { color: #e74c3c; font-weight: bold; border-left: 4px solid #e74c3c; background: rgba(231, 76, 60, 0.1); }
+        #minigameOverlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 300; display: none; justify-content: center; align-items: center; }
+        #minigamePanel { background: #1c2833; padding: 25px; border-radius: 15px; border: 2px solid #566573; text-align: center; color: white; }
+        #minigameTitle { font-size: 24px; margin-bottom: 10px; color: #e74c3c; font-weight: bold; }
+        #minigameStatus { margin-bottom: 15px; font-size: 18px; height: 25px; }
+        #minigameGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: 240px; height: 240px; }
+        .minigame-btn { width: 100%; height: 100%; background: #34495e; border: 2px solid #2c3e50; border-radius: 10px; cursor: pointer; transition: background 0.1s; }
+        .minigame-btn:hover:not(:disabled) { background: #4e6a85; }
+        .minigame-btn.active { background: #f1c40f; transform: scale(1.05); }
+        .minigame-btn:disabled { cursor: not-allowed; }
+    </style>
+</head>
+<body>
+    <div id="stats" class="ui-panel"> <div id="distanceDisplay">...</div> <div id="balanceDisplay">...</div> </div>
+    <div id="chat" class="ui-panel"> <div id="viewerCount">...</div> <div id="chatMessages"></div> </div>
+    <div id="shop" class="ui-panel">
+        <div style="font-weight: bold; text-align: center;">🛒 Магазин Уловок</div>
+        <button id="buyInvincibilityBtn" class="btn btn-shop" onclick="buyItem('invincibility')"><span>🛡️ Неуязвимость (5с)</span><span class="price">150Р</span></button>
+        <button id="buyMagnetBtn" class="btn btn-shop" onclick="buyItem('magnet')"><span>🧲 Магнит (10с)</span><span class="price">100Р</span></button>
+    </div>
+    <div id="gameOver" class="ui-panel overlay"> <h2>ПОЙМАН!</h2> <p id="gameOverReason"></p> <p id="finalScore"></p> <button class="btn" onclick="window.location.reload()">🚀 Новый Стрим</button> </div>
+    <div id="pauseOverlay" class="ui-panel overlay"> <h2 style="color: #f1c40f;">ПАУЗА</h2> <button class="btn" onclick="togglePause()">Продолжить</button> </div>
+    <div id="minigameOverlay">
+        <div id="minigamePanel">
+            <div id="minigameTitle">ОБЕЗВРЕДИТЬ БОМБУ!</div>
+            <div id="minigameStatus">Смотри...</div>
+            <div id="minigameGrid">
+                <button class="minigame-btn" data-id="0"></button> <button class="minigame-btn" data-id="1"></button> <button class="minigame-btn" data-id="2"></button>
+                <button class="minigame-btn" data-id="3"></button> <button class="minigame-btn" data-id="4"></button> <button class="minigame-btn" data-id="5"></button>
+                <button class="minigame-btn" data-id="6"></button> <button class="minigame-btn" data-id="7"></button> <button class="minigame-btn" data-id="8"></button>
+            </div>
+        </div>
+    </div>
+    
+    <script id="chatData" type="application/json">
+    { "chatters": [ { "name": "CoolGamer42", "type": "fan", "messages": ["Лети как ветер!", "EZ", "Топ контент!"] }, { "name": "Anna_Art", "type": "fan", "messages": ["Этот рисунок того стоил!", "Держись!", "Осторожно, граната!"] }, { "name": "xX_TrollMaster_Xx", "type": "troll", "messages": ["Тебя поймают и научат рисовать.", "Скучный стрим."] } ], "donations": [ { "amount": 10, "message": "+{amount}Р на новые кроссовки!" }, { "amount": 25, "message": "Держи {amount}Р на энергетик!" } ], "milestones": [ "Стрим онлайн! Картель на хвосте!", "Новый рекорд побега: {score}м!", "Ого, уже {score}м! Легенда!" ], "cartel_warnings": [ "Сзади черный внедорожник!", "Слышу гул мотора!", "ГРАНАТА ПОШЛА!", "Они что-то бросили!" ], "spike_warnings": [ "Осторожно, шипы на дороге!", "Впереди ловушка!", "Картель расставил шипы на полосе!" ] }
+    </script>
+
+    <script type="importmap">
+    { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+    </script>
+    <script type="module">
+        import * as THREE from 'three';
+        const CHAT_DATA = JSON.parse(document.getElementById('chatData').textContent);
+        
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1a2a3a);
+        scene.fog = new THREE.Fog(0x1a2a3a, 15, 70);
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.setPixelRatio(window.devicePixelRatio);
+        document.body.appendChild(renderer.domElement);
+        const hemiLight = new THREE.HemisphereLight(0xadd8e6, 0x444444, 1.5);
+        scene.add(hemiLight);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+        dirLight.position.set(5, 10, 7);
+        dirLight.castShadow = true;
+        scene.add(dirLight);
+        
+        const LANE_WIDTH = 2.5; const LANES = [-LANE_WIDTH, 0, LANE_WIDTH];
+        let currentLane = 1; let distance = 0; let balance = 0;
+        let viewers = Math.floor(800 + Math.random() * 400);
+        let gameSpeed = 8; let isGameOver = false; let isMinigameActive = false; let isGamePaused = false;
+        let chaserZ = 12; let nextMilestone = 100;
+        let verticalVelocity = 0; const GRAVITY = -0.04; const JUMP_FORCE = 0.8;
+        let isSliding = false; let slideTimer = 0;
+        
+        const player = new THREE.Mesh(new THREE.CapsuleGeometry(0.5, 0.5, 32), new THREE.MeshStandardMaterial({ color: 0xe74c3c, emissive: 0x550000 }));
+        player.castShadow = true; player.position.y = 1; player.position.z = 2;
+        scene.add(player);
+        const playerBBox = new THREE.Box3();
+
+        const groundSegments = []; const segmentLength = 10; const numSegments = 15;
+        for (let i = 0; i < numSegments; i++) {
+            const ground = new THREE.Mesh(new THREE.PlaneGeometry(LANE_WIDTH * 3 + 2, segmentLength), new THREE.MeshStandardMaterial({ color: 0x444444 }));
+            ground.rotation.x = -Math.PI / 2;
+            ground.position.z = -i * segmentLength + segmentLength/2;
+            ground.receiveShadow = true; scene.add(ground);
+            groundSegments.push(ground);
+        }
+        
+        const activeObjects = []; let spawnTimer = 0;
+        const obstacleJumpGeo = new THREE.BoxGeometry(LANE_WIDTH - 0.5, 1.5, 1);
+        const obstacleSlideGeo = new THREE.BoxGeometry(LANE_WIDTH - 0.5, 0.4, 1);
+        const obstacleMat = new THREE.MeshStandardMaterial({ color: 0x992222 });
+        const collectibleGeo = new THREE.CylinderGeometry(0.4, 0.4, 0.15, 24);
+        const collectibleMat = new THREE.MeshStandardMaterial({ color: 0xf1c40f, emissive: 0xccaa00 });
+        const spikeGeo = new THREE.ConeGeometry(0.4, 1.0, 8);
+        const spikeMat = new THREE.MeshStandardMaterial({ color: 0x888899, metalness: 0.8, roughness: 0.4 });
+        
+        const patterns = [ [['jump', 'empty', 'empty']], [['empty', 'slide', 'empty']], [['jump', 'jump', 'empty']], [['slide', 'empty', 'slide']], [['jump', 'empty', 'slide']], [['coin', 'coin', 'coin']], [['empty', 'coin', 'empty']], [['jump', 'coin', 'jump']], [['spikes', 'empty', 'empty']] ];
+        const SHOP_ITEMS = { invincibility: { cost: 150, duration: 5000, cooldown: 20000, name: '🛡️ Неуязвимость' }, magnet: { cost: 100, duration: 10000, cooldown: 25000, name: '🧲 Магнит' } };
+        let effects = {}; let cooldowns = {};
+
+        const tickAudio = new Audio();
+        
+        let grenadeTimer = 10 + Math.random() * 5;
+        let grenade = null;
+        let landingMarker = null;
+        let shakeFrames = 0; let shakeIntensity = 0;
+
+        const minigameOverlay = document.getElementById('minigameOverlay');
+        const minigameStatus = document.getElementById('minigameStatus');
+        const minigameButtons = document.querySelectorAll('.minigame-btn');
+        let nextMinigameDistance = 500;
+        let minigameSequence = [];
+        let playerSequence = [];
+        let minigameLevel = 3;
+        let minigameRounds = 3;
+        let currentRound = 1;
+        let isPlayerTurn = false;
+        
+        const distanceDisplay = document.getElementById('distanceDisplay');
+        const balanceDisplay = document.getElementById('balanceDisplay');
+        const viewerCountDisplay = document.getElementById('viewerCount');
+        const gameOverElement = document.getElementById('gameOver');
+        const gameOverReasonEl = document.getElementById('gameOverReason');
+        const finalScoreElement = document.getElementById('finalScore');
+        const pauseOverlay = document.getElementById('pauseOverlay');
+        let lastChatTime = 0;
+        
+        function playSound(src) { new Audio(src).play(); }
+
+        function throwGrenade() {
+            if (grenade) return;
+            const targetLane = Math.floor(Math.random() * 3);
+            const targetZ = player.position.z - 20;
+            grenade = new THREE.Mesh(new THREE.SphereGeometry(0.3, 8, 8), new THREE.MeshStandardMaterial({color: 0x222222}));
+            grenade.position.set(LANES[currentLane], player.position.y + 1, player.position.z);
+            grenade.userData.velocity = new THREE.Vector3((LANES[targetLane] - grenade.position.x) * 0.1, 3.5, -gameSpeed * 1.5);
+            scene.add(grenade);
+            landingMarker = new THREE.Mesh(new THREE.RingGeometry(0.8, 1, 32), new THREE.MeshBasicMaterial({ color: 0xff0000, side: THREE.DoubleSide, transparent: true }));
+            landingMarker.position.set(LANES[targetLane], 0.01, targetZ);
+            landingMarker.rotation.x = -Math.PI / 2;
+            scene.add(landingMarker);
+            tickAudio.src = 'tick.mp3';
+            tickAudio.loop = true;
+            tickAudio.volume = 0.3;
+            tickAudio.play().catch(e => console.error("Could not play tick.mp3. Is the file in the correct folder and are you using a local server?", e));
+        }
+
+        function updateGrenade(delta) {
+            if (!grenade) return;
+            grenade.position.addScaledVector(grenade.userData.velocity, delta);
+            grenade.userData.velocity.y -= 9.8 * delta;
+            if (landingMarker) landingMarker.material.opacity = 0.5 + Math.sin(Date.now() * 0.01) * 0.5;
+            if (!tickAudio.paused) tickAudio.volume = Math.min(1.0, tickAudio.volume + 0.05 * delta);
+            if (grenade.position.y <= 0.1) {
+                createDamageZone(landingMarker.position.x, landingMarker.position.z);
+                scene.remove(grenade); scene.remove(landingMarker);
+                grenade = null; landingMarker = null;
+                shakeScreen(10, 0.05);
+                tickAudio.pause();
+                playSound('explosion.mp3');
+            }
+        }
+
+        function createDamageZone(x, z) {
+            const zoneGeo = new THREE.CylinderGeometry(LANE_WIDTH / 2, LANE_WIDTH / 2, 3, 16, 1, true);
+            const zoneMat = new THREE.MeshBasicMaterial({ color: 0xff4500, transparent: true, opacity: 0.5, side: THREE.DoubleSide });
+            const damageZone = new THREE.Mesh(zoneGeo, zoneMat);
+            damageZone.position.set(x, 1.5, z);
+            damageZone.userData = { type: 'damageZone', lifetime: 4, bbox: new THREE.Box3().setFromObject(damageZone) };
+            activeObjects.push(damageZone); scene.add(damageZone);
+        }
+        
+        function shakeScreen(frames, intensity) { shakeFrames = frames; shakeIntensity = intensity; }
+        
+        function createSpikeTrap(lane, startZ) {
+            const spikeCount = 6; const spikeSpacing = 4.0;
+            for (let i = 0; i < spikeCount; i++) {
+                const spike = new THREE.Mesh(spikeGeo, spikeMat);
+                spike.position.set(LANES[lane], 0.5, startZ - i * spikeSpacing);
+                spike.castShadow = true;
+                spike.userData = { type: 'obstacle' };
+                activeObjects.push(spike); scene.add(spike);
+            }
+            const warningMsg = CHAT_DATA.spike_warnings[Math.floor(Math.random() * CHAT_DATA.spike_warnings.length)];
+            spawnChatMessage("Очевидец", warningMsg, 'cartel-message');
+        }
+
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+        }
+        
+        function spawnPattern() {
+            if (isGameOver) return;
+            const suddenSpawnZ = player.position.z - 25;
+            const spawnZ = player.position.z - 50;
+            let chosenPattern = patterns[Math.floor(Math.random() * patterns.length)][0].slice();
+            shuffleArray(chosenPattern);
+            let hasSpikes = false;
+            for (let i = 0; i < 3; i++) {
+                const type = chosenPattern[i];
+                let newObject = null;
+                switch(type) {
+                    case 'jump': newObject = new THREE.Mesh(obstacleJumpGeo, obstacleMat); newObject.position.set(LANES[i], 0.75, spawnZ); newObject.userData = { type: 'obstacle', subtype: 'jump' }; break;
+                    case 'slide': newObject = new THREE.Mesh(obstacleSlideGeo, obstacleMat); newObject.position.set(LANES[i], 1.5, spawnZ); newObject.userData = { type: 'obstacle', subtype: 'slide' }; break;
+                    case 'coin': newObject = new THREE.Mesh(collectibleGeo, collectibleMat); newObject.position.set(LANES[i], 1, spawnZ); newObject.userData = { type: 'collectible' }; break;
+                    case 'spikes': createSpikeTrap(i, suddenSpawnZ); hasSpikes = true; break;
+                }
+                if (newObject) { newObject.castShadow = true; activeObjects.push(newObject); scene.add(newObject); }
+            }
+            spawnTimer = hasSpikes ? 3.0 : Math.max(0.7, 1.8 - distance / 500);
+        }
+
+        function spawnChatMessage(username, msg, type = 'fan') {
+            const chatBox = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `chat-message ${type}`;
+            messageDiv.innerHTML = `<b>${username}:</b> ${msg}`;
+            chatBox.appendChild(messageDiv);
+            if (chatBox.children.length > 30) chatBox.removeChild(chatBox.firstChild);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        function updateChat() {
+            const now = Date.now();
+            if (now - lastChatTime > 2500 + Math.random() * 2000) {
+                lastChatTime = now;
+                const dangerDistance = chaserZ - player.position.z;
+                if (dangerDistance < 12 && Math.random() < 0.7 && !grenade) {
+                    const warningMsg = CHAT_DATA.cartel_warnings[Math.floor(Math.random() * CHAT_DATA.cartel_warnings.length)];
+                    spawnChatMessage("Очевидец", warningMsg, 'cartel-message');
+                } else {
+                    const chatter = CHAT_DATA.chatters[Math.floor(Math.random() * CHAT_DATA.chatters.length)];
+                    const message = chatter.messages[Math.floor(Math.random() * chatter.messages.length)];
+                    spawnChatMessage(chatter.name, message, chatter.type);
+                }
+            }
+            if (distance > nextMilestone) {
+                let msg = CHAT_DATA.milestones[Math.floor(Math.random() * (CHAT_DATA.milestones.length - 1) + 1)];
+                msg = msg.replace('{score}', nextMilestone);
+                spawnChatMessage("Стрим-Бот", msg, "milestone");
+                nextMilestone *= 2;
+                viewers += Math.floor(50 + Math.random() * 100);
+            }
+        }
+
+        function updateUI() {
+            distanceDisplay.textContent = `🔝 Дистанция: ${Math.floor(distance)}м`;
+            balanceDisplay.textContent = `💰 Баланс: ${balance}`;
+            viewerCountDisplay.textContent = `👥 Зрители: ${viewers.toLocaleString()}`;
+            updateShopUI();
+        }
+        
+        function updateShopUI() {
+            const now = Date.now();
+            for (const itemName in SHOP_ITEMS) {
+                const item = SHOP_ITEMS[itemName];
+                const btn = document.getElementById(`buy${itemName.charAt(0).toUpperCase() + itemName.slice(1)}Btn`);
+                const nameSpan = btn.querySelector('span:first-child');
+                btn.disabled = false;
+                nameSpan.textContent = `${item.name}`;
+                if (effects[itemName] && now < effects[itemName]) {
+                    btn.disabled = true;
+                    const timeLeft = Math.ceil((effects[itemName] - now) / 1000);
+                    nameSpan.textContent = `АКТИВНО (${timeLeft}с)`;
+                } else if (cooldowns[itemName] && now < cooldowns[itemName]) {
+                    btn.disabled = true;
+                    const timeLeft = Math.ceil((cooldowns[itemName] - now) / 1000);
+                    nameSpan.textContent = `КД (${timeLeft}с)`;
+                } else if (balance < item.cost) {
+                    btn.disabled = true;
+                }
+            }
+        }
+        
+        window.buyItem = function(itemName) {
+            if(isGamePaused || isMinigameActive || isGameOver) return;
+            const item = SHOP_ITEMS[itemName];
+            const now = Date.now();
+            if (balance >= item.cost && (!cooldowns[itemName] || now > cooldowns[itemName])) {
+                balance -= item.cost;
+                cooldowns[itemName] = now + item.cooldown;
+                effects[itemName] = now + item.duration;
+            }
+        }
+        
+        window.togglePause = function() {
+            if(isGameOver || isMinigameActive) return;
+            isGamePaused = !isGamePaused;
+            if (isGamePaused) {
+                pauseOverlay.style.display = 'flex';
+                if(grenade) tickAudio.pause();
+            } else {
+                pauseOverlay.style.display = 'none';
+                if(grenade) tickAudio.play();
+            }
+        }
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                togglePause();
+            }
+            if (isGameOver || isMinigameActive || isGamePaused) return;
+            if (event.key === 'ArrowLeft' && currentLane > 0) currentLane--;
+            else if (event.key === 'ArrowRight' && currentLane < 2) currentLane++;
+            else if ((event.key === 'ArrowUp' || event.key === ' ') && player.position.y <= 1.0) verticalVelocity = JUMP_FORCE;
+            else if (event.key === 'ArrowDown' && !isSliding) { isSliding = true; slideTimer = 40; }
+        });
+
+        function triggerGameOver(reason) {
+            isGameOver = true;
+            gameSpeed = 0;
+            tickAudio.pause();
+            gameOverReasonEl.textContent = reason;
+            finalScoreElement.innerHTML = `🔝 ${Math.floor(distance)}м <br> 💰 ${balance}`;
+            gameOverElement.style.display = 'flex';
+        }
+
+        function startMinigame() {
+            isMinigameActive = true;
+            minigameOverlay.style.display = 'flex';
+            currentRound = 1;
+            minigameLevel = 3;
+            spawnChatMessage("Стрим-Бот", "Обезвредь бомбу, пока не поздно!", "milestone");
+            playSequence();
+        }
+
+        function playSequence() {
+            isPlayerTurn = false;
+            playerSequence = [];
+            minigameSequence = [];
+            minigameStatus.textContent = `Этап ${currentRound}/${minigameRounds}: Смотри...`;
+            minigameButtons.forEach(btn => btn.disabled = true);
+            for (let i = 0; i < minigameLevel; i++) { minigameSequence.push(Math.floor(Math.random() * 9)); }
+            let i = 0;
+            const interval = setInterval(() => {
+                if (i > 0) minigameButtons[minigameSequence[i-1]].classList.remove('active');
+                if (i < minigameSequence.length) {
+                    minigameButtons[minigameSequence[i]].classList.add('active'); i++;
+                } else {
+                    clearInterval(interval); isPlayerTurn = true;
+                    minigameStatus.textContent = 'Твой ход!';
+                    minigameButtons.forEach(btn => btn.disabled = false);
+                }
+            }, 600);
+        }
+
+        function handlePlayerClick(e) {
+            if (!isPlayerTurn) return;
+            const clickedId = parseInt(e.target.dataset.id);
+            playerSequence.push(clickedId);
+            e.target.classList.add('active');
+            setTimeout(() => e.target.classList.remove('active'), 200);
+            const lastIndex = playerSequence.length - 1;
+            if (playerSequence[lastIndex] !== minigameSequence[lastIndex]) {
+                endMinigame(false); return;
+            }
+            if (playerSequence.length === minigameSequence.length) {
+                currentRound++;
+                if (currentRound > minigameRounds) { endMinigame(true); } 
+                else { minigameLevel++; setTimeout(playSequence, 1000); }
+            }
+        }
+        minigameButtons.forEach(btn => btn.addEventListener('click', handlePlayerClick));
+
+        function endMinigame(isSuccess) {
+            if (isSuccess) {
+                balance += 500;
+                spawnChatMessage("Стрим-Бот", "Бомба обезврежена! +500Р!", "donation");
+            } else {
+                spawnChatMessage("Стрим-Бот", "Не та кнопка! Беги!", "cartel-message");
+            }
+            nextMinigameDistance *= 2.5;
+            minigameOverlay.style.display = 'none';
+            isMinigameActive = false;
+        }
+        
+        const clock = new THREE.Clock();
+        function animate() {
+            requestAnimationFrame(animate);
+            if (isGameOver || isMinigameActive || isGamePaused) {
+                // Still need to render the scene even when paused
+                renderer.render(scene, camera);
+                return;
+            }
+            const delta = clock.getDelta();
+            
+            const now = Date.now();
+            const isInvincible = effects.invincibility && now < effects.invincibility;
+            const isMagnetActive = effects.magnet && now < effects.magnet;
+            player.material.emissive.setHex(isInvincible ? 0x00ff00 : 0x550000);
+
+            if (shakeFrames > 0) {
+                const originalZ = player.position.z + 4;
+                camera.position.x = (Math.random() - 0.5) * shakeIntensity;
+                camera.position.y = 2.5 + (Math.random() - 0.5) * shakeIntensity;
+                camera.position.z = originalZ + (Math.random() - 0.5) * shakeIntensity;
+                shakeFrames--;
+            } else { camera.position.set(0, 2.5, player.position.z + 4); }
+            
+            distance += gameSpeed * delta;
+            
+            if (distance > nextMinigameDistance) { nextMinigameDistance = Infinity; startMinigame(); }
+
+            player.position.z -= gameSpeed * delta;
+            player.position.x += (LANES[currentLane] - player.position.x) * 0.1;
+            player.position.y += verticalVelocity;
+            if (player.position.y > 1.0) verticalVelocity += GRAVITY;
+            else { player.position.y = 1.0; verticalVelocity = 0; }
+            if (isSliding) {
+                player.scale.y = 0.5; player.position.y = 0.5;
+                slideTimer--;
+                if (slideTimer <= 0) { isSliding = false; player.scale.y = 1; player.position.y = 1.0; }
+            }
+            
+            groundSegments.forEach(seg => { seg.position.z += gameSpeed * delta; if (seg.position.z > camera.position.z + segmentLength) seg.position.z -= segmentLength * numSegments; });
+            playerBBox.setFromObject(player);
+
+            for (let i = activeObjects.length - 1; i >= 0; i--) {
+                const obj = activeObjects[i];
+                obj.position.z += gameSpeed * delta;
+                if (obj.userData.type === 'collectible') {
+                    obj.rotation.y += 0.1;
+                    if(isMagnetActive && obj.position.distanceTo(player.position) < 8) {
+                        obj.position.x += (player.position.x - obj.position.x) * 0.1;
+                    }
+                }
+                if (obj.userData.type === 'damageZone') {
+                    obj.userData.lifetime -= delta;
+                    obj.material.opacity = 0.5 * (obj.userData.lifetime / 4);
+                    if (obj.userData.lifetime <= 0) { scene.remove(obj); activeObjects.splice(i, 1); continue; }
+                }
+                if (obj.position.z > camera.position.z + 2) { scene.remove(obj); activeObjects.splice(i, 1); continue; }
+                const currentBBox = new THREE.Box3().setFromObject(obj);
+                if (playerBBox.intersectsBox(currentBBox)) {
+                    let shouldDie = true;
+                    if (isInvincible) shouldDie = false;
+                    if (isSliding && obj.userData.subtype === 'slide') shouldDie = false;
+
+                    if ((obj.userData.type === 'obstacle' || obj.userData.type === 'damageZone') && shouldDie) {
+                        triggerGameOver(obj.userData.type === 'obstacle' ? "Наткнулся на препятствие!" : "Попал под взрыв!"); return;
+                    } else if (obj.userData.type === 'collectible') {
+                        const donation = CHAT_DATA.donations[Math.floor(Math.random() * CHAT_DATA.donations.length)];
+                        balance += donation.amount;
+                        spawnChatMessage("Щедрый Зритель", donation.message.replace('{amount}', donation.amount), "donation");
+                        scene.remove(obj); activeObjects.splice(i, 1);
+                    }
+                }
+            }
+            
+            spawnTimer -= delta;
+            if (spawnTimer <= 0) { spawnPattern(); }
+            
+            grenadeTimer -= delta;
+            if (grenadeTimer <= 0) { throwGrenade(); grenadeTimer = 8 + Math.random() * 7; }
+            updateGrenade(delta);
+
+            chaserZ -= gameSpeed * 0.95 * delta;
+            if (chaserZ <= player.position.z) triggerGameOver("Картель тебя догнал!");
+            
+            updateChat(); updateUI();
+            renderer.render(scene, camera);
+        }
+        
+        spawnChatMessage("Стрим-Бот", CHAT_DATA.milestones[0], "milestone");
+        animate();
+    </script>
+</body>
+</html>
